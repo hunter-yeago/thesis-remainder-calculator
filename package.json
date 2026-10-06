@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
-    "start": "node ./dist/server/entry.mjs"
+    "preview": "astro build && wrangler dev",
+    "deploy": "astro build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.6",
+    "@astrojs/cloudflare": "^14.3.3",
     "astro": "^7.3.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
   }
 }
