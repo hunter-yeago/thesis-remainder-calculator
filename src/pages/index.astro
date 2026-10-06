@@ -1,0 +1,123 @@
+---
+import { getState } from '../lib/state';
+const { pagesLeft, totalPages } = await getState();
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thesis Pages Left</title>
+    <style>
+      :root { color-scheme: light dark; --bg: #f4f4f2; --fg: #1c1c1c; --muted: #6b6b66; --track: #d8d8d4; --accent: #e4572e; --done: #2e9e5b; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #eee; --muted: #9a9a94; --track: #333; } }
+      body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; }
+      main { width: min(100% - 32px, 560px); text-align: center; }
+      .count { font-size: clamp(4rem, 18vw, 7rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; margin: 0; }
+      .label { font-size: 1.25rem; color: var(--muted); margin: 0.25rem 0 2rem; }
+      main.finished .count, main.finished .label { color: var(--done); }
+
+      input[type=range] { --pct: 0%; width: 100%; height: 44px; margin: 0; background: transparent; appearance: none; cursor: pointer; }
+      input[type=range]::-webkit-slider-runnable-track { height: 12px; border-radius: 6px; background: linear-gradient(to right, var(--accent) var(--pct), var(--track) var(--pct)); }
+      input[type=range]::-moz-range-track { height: 12px; border-radius: 6px; background: linear-gradient(to right, var(--accent) var(--pct), var(--track) var(--pct)); }
+      input[type=range]::-webkit-slider-thumb { appearance: none; width: 32px; height: 32px; margin-top: -10px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); }
+      input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); }
+      main.finished input[type=range] { --accent: var(--done); }
+
+      .ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+      .footer { margin-top: 2.5rem; color: var(--muted); font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+      .footer input { width: 5em; font: inherit; padding: 0.2em 0.4em; border: 1px solid var(--track); border-radius: 6px; background: transparent; color: var(--fg); }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <p class="count" id="count">{pagesLeft}</p>
+      <p class="label" id="label">pages left of thesis</p>
+      <input id="slider" type="range" min="0" max={totalPages} value={totalPages - pagesLeft}
+        aria-label="Pages finished" />
+      <div class="ends"><span>Start</span><span>Done!</span></div>
+      <div class="footer">
+        <label>Total pages <input id="total" type="number" min="1" max="10000" value={totalPages} /></label>
+        <span id="status"></span>
+      </div>
+    </main>
+
+    <script>
+      // The slider measures pages *finished* so that progress moves left → right;
+      // what's stored and shown is pages left.
+      const app = document.getElementById('app')!;
+      const slider = document.getElementById('slider') as HTMLInputElement;
+      const totalInput = document.getElementById('total') as HTMLInputElement;
+      const count = document.getElementById('count')!;
+      const label = document.getElementById('label')!;
+      const status = document.getElementById('status')!;
+
+      let total = Number(slider.max);
+      let left = total - Number(slider.value);
+      let pending = false;
+
+      function render() {
+        slider.max = String(total);
+        slider.value = String(total - left);
+        slider.style.setProperty('--pct', `${((total - left) / total) * 100}%`);
+        slider.setAttribute('aria-valuetext', `${left} pages left of thesis`);
+        if (document.activeElement !== totalInput) totalInput.value = String(total);
+        count.textContent = left === 0 ? '🎉' : String(left);
+        label.textContent = left === 0 ? 'Thesis complete!' : left === 1 ? 'page left' : 'pages left of thesis';
+        app.classList.toggle('finished', left === 0);
+        document.title = left === 0 ? 'Thesis complete!' : `${left} pages left of thesis`;
+      }
+      render();
+
+      let saveTimer: number | undefined;
+      function save() {
+        pending = true;
+        status.textContent = 'Saving…';
+        clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(async () => {
+          try {
+            const res = await fetch('/api/thesis', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ pagesLeft: left, totalPages: total }),
+            });
+            status.textContent = res.ok ? 'Saved' : 'Could not save';
+          } catch {
+            status.textContent = 'Could not save';
+          }
+          pending = false;
+        }, 300);
+      }
+
+      slider.addEventListener('input', () => {
+        left = total - Number(slider.value);
+        render();
+        save();
+      });
+
+      totalInput.addEventListener('change', () => {
+        const n = Math.round(Number(totalInput.value));
+        if (!Number.isFinite(n) || n < 1) { totalInput.value = String(total); return; }
+        // Keep the pages already written the same when the total changes.
+        const finished = total - left;
+        total = Math.min(10000, n);
+        left = Math.max(0, total - finished);
+        render();
+        save();
+      });
+
+      // Pick up changes made from other browsers.
+      setInterval(async () => {
+        if (pending || document.activeElement === totalInput) return;
+        try {
+          const state = await (await fetch('/api/thesis')).json();
+          if (state.pagesLeft !== left || state.totalPages !== total) {
+            left = state.pagesLeft;
+            total = state.totalPages;
+            render();
+          }
+        } catch {}
+      }, 3000);
+    </script>
+  </body>
+</html>
