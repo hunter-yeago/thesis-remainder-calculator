@@ -1,12 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "thesis-pages-left",
+  "name": "thesis-remainder-calculator",
   "compatibility_date": "2026-10-01",
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": { "binding": "ASSETS" },
   "kv_namespaces": [
-    // Create with `npx wrangler kv namespace create THESIS` and paste the id here.
-    { "binding": "THESIS", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+    // No id: `wrangler deploy` creates the namespace on first deploy and reuses it after.
+    { "binding": "THESIS" }
   ],
   "observability": { "enabled": true }
 }
